@@ -1,0 +1,61 @@
+# Obsidian Bases view: everything the agent has written into the vault.
+#
+# Filter: any note tagged `agent` (write_note adds this tag automatically).
+# Use this to audit what the memory layer has captured, find recent agent
+# activity, or spot notes that should be promoted into Daniel-curated
+# topics.
+#
+# Place at <vault>/_views/agent-contributions.base — Obsidian picks it up
+# automatically. The brain indexer ignores this file (.base, not .md).
+
+filters:
+  and:
+    - 'file.hasTag("agent")'
+    - '!file.inFolder("_views")'
+
+formulas:
+  topic: 'file.folder'
+  age_days: '(now() - file.ctime).days'
+
+properties:
+  formula.topic:
+    displayName: "Topic"
+  formula.age_days:
+    displayName: "Days old"
+  created_at:
+    displayName: "Created"
+  file.mtime:
+    displayName: "Last modified"
+  file.tags:
+    displayName: "Tags"
+
+views:
+  - type: table
+    name: "All agent contributions"
+    order:
+      - file.name
+      - formula.topic
+      - created_at
+      - file.mtime
+      - formula.age_days
+      - file.tags
+
+  - type: table
+    name: "Last 7 days"
+    filters:
+      and:
+        - '(now() - file.ctime).days < 7'
+    order:
+      - file.name
+      - formula.topic
+      - file.mtime
+      - file.tags
+
+  - type: cards
+    name: "Recent — gallery"
+    limit: 20
+    order:
+      - file.name
+      - formula.topic
+      - created_at
+      - file.tags

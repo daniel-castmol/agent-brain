@@ -10,13 +10,23 @@ dist/
 .venv/
 venv/
 
-# uv
-uv.lock
+# uv — we COMMIT uv.lock for reproducible installs across collaborators.
+# (uncomment the next line only if you specifically don't want it tracked)
+# uv.lock
+
+# Local env overrides — never check in real secrets/paths
+.env
+.env.local
 
 # IDE
 .vscode/
 .idea/
 *.swp
+
+# OS
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
 
 # Brain
 .brain/
@@ -24,6 +34,6 @@ uv.lock
 *.duckdb.wal
 .fastembed_cache/
 
-.env
-brain-handoff.tar.gz
+# Local artifacts (not for distribution)
+*.tar.gz
 files2/
