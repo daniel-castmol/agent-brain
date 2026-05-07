@@ -7,12 +7,12 @@ Commands:
     brain serve                 Run the MCP server (stdio).
     brain search "<query>"      Debug search from the command line.
     brain status                Show counts and config.
+    brain report                Show a vault health report.
 """
 
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -23,6 +23,7 @@ from watchdog.observers import Observer
 from brain.config import settings
 from brain.embedder import make_embedder
 from brain.indexer import index_vault
+from brain.report import build_report
 from brain.store import Store
 
 app = typer.Typer(no_args_is_help=True, help="Local markdown memory layer for AI agents.")
@@ -178,6 +179,53 @@ def status() -> None:
     table.add_row("chunks", str(chunks_n))
     table.add_row("links", str(links_n))
     console.print(table)
+
+
+@app.command()
+def report(
+    raw: bool = typer.Option(False, "--json", help="Output the raw JSON report."),
+) -> None:
+    """Show a vault health report — counts, authorship mix, recent activity."""
+    store = _make_store()
+    data = build_report(store)
+
+    if raw:
+        console.print_json(data=data)
+        return
+
+    v = data["vault"]
+    a = data["authorship"]
+    act = data["activity"]
+
+    summary = Table(show_header=False, box=None)
+    summary.add_column(style="dim")
+    summary.add_column()
+    summary.add_row("notes", str(v["notes"]))
+    summary.add_row("chunks", str(v["chunks"]))
+    summary.add_row("links", str(v["links"]))
+    summary.add_row("total chars", f"{v['total_chars']:,}")
+    summary.add_row("vault age", f"{v['age_days']} days")
+    if v["oldest_note"]:
+        summary.add_row("oldest", v["oldest_note"]["path"])
+    if v["newest_note"]:
+        summary.add_row("newest", v["newest_note"]["path"])
+    summary.add_row("agent-authored", str(a["agent_authored"]))
+    summary.add_row("user-authored", str(a["user_authored"]))
+    summary.add_row("mixed (agent in user)", str(a["mixed_authored"]))
+    summary.add_row("modified 24h", str(act["modified_24h"]))
+    summary.add_row("modified 7d", str(act["modified_7d"]))
+    summary.add_row("modified 30d", str(act["modified_30d"]))
+    console.print(summary)
+
+    if act["recent_notes"]:
+        console.print("\n[bold cyan]Recent[/bold cyan]")
+        recent = Table(show_header=True, header_style="bold cyan", box=None)
+        recent.add_column("modified_at", style="dim")
+        recent.add_column("path")
+        recent.add_column("title", style="white")
+        for n in act["recent_notes"]:
+            recent.add_row(n["modified_at"] or "—", n["path"], n["title"] or "")
+        console.print(recent)
 
 
 if __name__ == "__main__":

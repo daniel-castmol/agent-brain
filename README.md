@@ -16,10 +16,13 @@ graph-based "find related" — all running locally, no API keys, no cloud.
                                        │
                                        ▼
                                  MCP server (stdio)
-                                 ├─ search_notes
+                                 ├─ search_notes      (+ optional rerank)
                                  ├─ read_note
                                  ├─ list_recent
-                                 └─ find_related
+                                 ├─ find_related
+                                 ├─ write_note         ← v2
+                                 ├─ append_to_note     ← v2
+                                 └─ vault_report       ← v2
                                        │
                                        ▼
                               Claude Code / Desktop
@@ -64,7 +67,7 @@ agent memory:
 | ------ | -------------------------------------------------------------- | -------- |
 | Bronze | `~/brain-vault/**/*.md` — markdown, version-controllable       | yes      |
 | Silver | DuckDB tables: `notes`, `chunks` (FLOAT[384] embeddings), `links` | no, rebuildable |
-| Gold   | Cosine top-k + FTS BM25 fused via RRF, served via 4 MCP tools | no       |
+| Gold   | Cosine top-k + FTS BM25 fused via RRF, optional cross-encoder rerank, served via 7 MCP tools | no |
 
 Disposability of silver and gold is the most important property. Blow away
 `~/.brain/db.duckdb`, run `brain index`, and the system is back. Same shape
@@ -147,11 +150,35 @@ note excerpts* become part of the prompt sent to Anthropic for that
 request — same as any text you paste into a Claude conversation. brain
 itself never sends anything anywhere.
 
-## Roadmap
+## MCP tools
 
-**v2 — write-back.** `write_note` and `append_to_note` MCP tools so the
-agent can durably leave traces. A `SKILL.md` that teaches Claude *when* to
-call each tool.
+The MCP server exposes seven tools. Read tools (1–4) work on a v1 install;
+write tools (5–6) and the report tool (7) are v2.
+
+| Tool             | Purpose                                                          |
+| ---------------- | ---------------------------------------------------------------- |
+| `search_notes`   | Hybrid (vector + BM25) search, optional cross-encoder rerank     |
+| `read_note`      | Load a note's full content from its vault-relative path          |
+| `list_recent`    | Most recently modified notes                                     |
+| `find_related`   | Wikilink + averaged-embedding neighborhood of a seed note        |
+| `write_note`     | Create a new note, stamped with `author: agent` provenance       |
+| `append_to_note` | Append to an existing note (under a heading or `## Agent notes`) |
+| `vault_report`   | Counts, authorship mix, recent activity                          |
+
+## Optional cross-encoder rerank
+
+Two-stage retrieval: hybrid_search returns ~25 candidates (cheap), a
+cross-encoder rescores them jointly (more accurate, ~100ms, ~120MB
+one-time download). Off by default — flip on once your vault is big
+enough that hybrid alone is noisy:
+
+```bash
+export BRAIN_RERANK_ENABLED=true
+# Optional: pick a different cross-encoder
+export BRAIN_RERANK_MODEL=Xenova/ms-marco-MiniLM-L-6-v2
+```
+
+## Roadmap
 
 **v3 — retrieval polish.** Per-chunk SHA reuse, HNSW once vault scale
 justifies it, better wikilink resolution, tag namespace queries.
@@ -165,10 +192,9 @@ See [`tasks/todo.md`](./tasks/todo.md) for the working roadmap.
 ## Testing
 
 ```bash
-uv run pytest
+uv run pytest                       # 36 unit tests, <2s
+uv run pytest -m integration        # +3 e2e tests (downloads ~120MB cross-encoder)
 ```
-
-Pure-function tests for the parser and chunker, no model or DB required.
 
 ## License
 

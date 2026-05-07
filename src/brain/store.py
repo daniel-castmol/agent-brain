@@ -48,7 +48,12 @@ CREATE TABLE IF NOT EXISTS notes (
 
 CREATE TABLE IF NOT EXISTS chunks (
     id           BIGINT PRIMARY KEY,
-    note_path    VARCHAR REFERENCES notes(path),
+    -- note_path is logically a foreign key to notes(path), but DuckDB does
+    -- not support UPDATE on FK-referenced rows (re-indexing would fail).
+    -- Referential integrity is enforced at the application level: callers
+    -- must use store.delete_chunks_for(path) before deleting/upserting a
+    -- note row.
+    note_path    VARCHAR,
     chunk_index  INTEGER,
     heading_path VARCHAR,
     content      VARCHAR,
@@ -107,29 +112,60 @@ class Store:
     # Upserts
     # ------------------------------------------------------------------
     def upsert_note(self, note: Note, modified_at: datetime) -> None:
+        # Avoid ON CONFLICT DO UPDATE: DuckDB enforces the chunks→notes FK
+        # against the upsert in a way that fires even when the PK isn't
+        # changing. Plain UPDATE on existing rows side-steps that.
         conn = self.connect()
-        conn.execute(
-            """
-            INSERT INTO notes (path, title, frontmatter, tags, content_hash, modified_at, indexed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (path) DO UPDATE SET
-                title = excluded.title,
-                frontmatter = excluded.frontmatter,
-                tags = excluded.tags,
-                content_hash = excluded.content_hash,
-                modified_at = excluded.modified_at,
-                indexed_at = excluded.indexed_at
-            """,
-            [
-                note.path,
-                note.title,
-                json.dumps(note.frontmatter, default=str),
-                note.tags,
-                note.content_hash,
-                modified_at,
-                datetime.utcnow(),
-            ],
-        )
+        indexed_at = datetime.now()
+        frontmatter_json = json.dumps(note.frontmatter, default=str)
+        existing = conn.execute(
+            "SELECT 1 FROM notes WHERE path = ?", [note.path]
+        ).fetchone()
+        if existing:
+            conn.execute(
+                """
+                UPDATE notes SET
+                    title = ?,
+                    frontmatter = ?,
+                    tags = ?,
+                    content_hash = ?,
+                    modified_at = ?,
+                    indexed_at = ?
+                WHERE path = ?
+                """,
+                [
+                    note.title,
+                    frontmatter_json,
+                    note.tags,
+                    note.content_hash,
+                    modified_at,
+                    indexed_at,
+                    note.path,
+                ],
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO notes (path, title, frontmatter, tags, content_hash, modified_at, indexed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    note.path,
+                    note.title,
+                    frontmatter_json,
+                    note.tags,
+                    note.content_hash,
+                    modified_at,
+                    indexed_at,
+                ],
+            )
+
+    def delete_chunks_for(self, note_path: str) -> None:
+        """Drop all chunks for a note. Caller must do this *before* `upsert_note`
+        on a re-index, because DuckDB's FK enforcement on UPSERT trips when
+        chunks still reference the note row being updated."""
+        conn = self.connect()
+        conn.execute("DELETE FROM chunks WHERE note_path = ?", [note_path])
 
     def replace_chunks(
         self,

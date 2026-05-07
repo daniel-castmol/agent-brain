@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     # Hybrid search: weight on vector vs FTS results in RRF fusion.
     rrf_k: int = Field(default=60)
 
+    # Cross-encoder reranking. Off by default — the model is ~120MB and adds
+    # ~100ms per query. Worth turning on once the vault has enough overlap
+    # that hybrid_search alone is noisy. Set BRAIN_RERANK_ENABLED=true to opt in.
+    rerank_enabled: bool = Field(default=False)
+    rerank_model: str = Field(default="Xenova/ms-marco-MiniLM-L-6-v2")
+    # When reranking, fetch this many candidates from hybrid_search before
+    # rescoring down to the requested k. Bigger pool → better recall, slower.
+    rerank_candidate_pool: int = Field(default=25)
+
     @property
     def db_path(self) -> Path:
         return self.db_dir / self.db_filename

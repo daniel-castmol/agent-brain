@@ -7,29 +7,32 @@
 - [ ] Drop the seed design note (`vault-seed/00-brain-design.md`) into `~/brain-vault/` and re-index, so brain has something real to search
 - [ ] Sanity-check inside Claude Code: ask "what did we decide about the storage layer for brain?" — should call `search_notes`
 
-## v2 — write-back
+## v2 — write-back ✅ shipped
 
-- [ ] `write_note(path, frontmatter, body)` MCP tool
-  - Default destination `<vault>/_agent/sessions/YYYY-MM-DD.md` so user-curated content stays clean
-  - Validates path is inside vault, refuses traversal
-  - Triggers re-index of just that file
-- [ ] `append_to_note(path, content, heading=None)` MCP tool
-  - Appends under a specific heading or at end of file
-- [ ] Ship a `SKILL.md` (Claude Code skill) that teaches *when* to use each tool
-  - Search at the start of any session referencing past work
-  - Always `read_note` after a search hit before answering — excerpts aren't full context
-  - Append to today's session log when concluding a non-trivial decision
-- [ ] Decide on session-log format. Probably:
-  ```
-  ---
-  date: 2026-05-06
-  tags: [session]
-  ---
-  # Session: <topic>
-  ## Context
-  ## Decisions
-  ## Next
-  ```
+- [x] `write_note(path, body, frontmatter=None, tags=None)` MCP tool
+  - Validates path is inside vault, refuses traversal/absolute paths
+  - Refuses to overwrite — use `append_to_note` for existing notes
+  - Auto-stamps `author: agent`, `created_at`, and `agent` tag
+  - Triggers single-file re-index via `index_single_file`
+- [x] `append_to_note(path, content, heading=None)` MCP tool
+  - Explicit heading → insert under it (creates if missing)
+  - Agent-authored note → append at end with `### YYYY-MM-DD HH:MM`
+  - User-authored note → insert under `## Agent notes`
+- [x] Cross-encoder reranker wired into `search_notes`
+  - Off by default (`BRAIN_RERANK_ENABLED=true` to opt in)
+  - Two-stage: hybrid_search top-N, then cross-encoder rescoring
+- [x] `vault_report()` MCP tool + `brain report` CLI subcommand
+  - Counts (notes/chunks/links), authorship mix, recent-activity bins
+- [x] `SKILL.md` (Claude Code skill) teaches *when* to use each tool
+
+### v2 known issues / migration notes
+
+- **Foreign key drop in `chunks` schema.** v1 declared `chunks.note_path
+  REFERENCES notes(path)`; DuckDB doesn't support UPDATE on FK-referenced
+  rows, so the FK is dropped in v2. Existing v1 databases with the FK
+  will fail on first re-index of an existing note. Workaround:
+  `rm ~/.brain/db.duckdb && uv run brain index`. Vault is the truth; DB
+  is rebuildable.
 
 ## v3 — retrieval polish
 

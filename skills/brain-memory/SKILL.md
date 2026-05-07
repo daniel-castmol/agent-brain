@@ -2,8 +2,8 @@
 name: brain-memory
 description: >
   Personal memory layer for Daniel — markdown vault at ~/brain-vault served via the
-  brain MCP server (stdio). Six tools: search_notes, read_note, list_recent,
-  find_related, write_note, append_to_note. Use whenever the user references past
+  brain MCP server (stdio). Seven tools: search_notes, read_note, list_recent,
+  find_related, write_note, append_to_note, vault_report. Use whenever the user references past
   work, prior decisions, or knowledge that might be in the vault, OR when the user
   wants to capture something worth keeping across sessions. Triggers on phrases like
   "what did we decide about", "remember when", "find that note on", "what was I
@@ -33,7 +33,7 @@ tell at a glance what came from him vs from us.
 | `list_recent(n=10)` | When the user asks "what was I working on", "show me yesterday's notes", or to orient yourself early in a session. |
 | `find_related(path, k=5)` | When the user wants to explore a topic — "what else is connected to this", "what should I read alongside". |
 | `vault_report()` | When the user asks for a status/dashboard/summary of their vault — "give me a brain report", "how's the vault looking", "what have I been writing". Format the dict result as a readable report (markdown tables work well); don't dump it raw. |
-| `write_note(path, body, frontmatter, tags, overwrite=False)` | When the user explicitly says save/write/note this, or after a substantial decision/research that's worth preserving. Stamps `author: agent` automatically. |
+| `write_note(path, body, frontmatter=None, tags=None)` | When the user explicitly says save/write/note this, or after a substantial decision/research that's worth preserving. Stamps `author: agent` automatically. **Refuses to overwrite** existing notes — use `append_to_note` for those. |
 | `append_to_note(path, content, heading=None)` | When adding to an existing note — daily session log, ongoing topic note, or contributing to one of Daniel's hand-written notes. Routing rules below. |
 
 ## Read patterns
@@ -103,9 +103,9 @@ under that heading.
 - **`append_to_note`** — adds to an existing file. Logs a follow-up,
   extends a topic note, or contributes to one of Daniel's notes.
 
-Quick rule: if the path you'd write to already exists, you almost always
-want `append_to_note`, not `write_note(overwrite=True)`. Overwriting nukes
-history.
+Quick rule: if the path you'd write to already exists, use
+`append_to_note`. `write_note` will return an error if the path is taken
+— that's intentional, to protect existing notes from being clobbered.
 
 ### Anti-patterns
 
@@ -113,13 +113,11 @@ history.
   session log instead (`sessions/YYYY-MM-DD.md`).
 - ❌ Don't write notes "just in case" — only when the content has clear
   future-session value. Ephemeral conversation belongs in conversation.
-- ❌ Don't pass `overwrite=True` unless Daniel explicitly asked to
-  replace.
 - ❌ Don't fabricate paths or topic structure. If unsure, search/list
   first or ask.
 - ❌ Don't write a note then immediately read it back to "verify" —
-  `write_note` returns `indexed: True` on success. The round-trip is
-  already proven by tests.
+  `write_note` returns `{"status": "written"}` on success. The round-trip
+  is already proven by tests.
 
 ## Example flows
 
