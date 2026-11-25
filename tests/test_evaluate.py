@@ -187,3 +187,32 @@ def test_cli_eval_errors_cleanly_on_missing_gold(tmp_path: Path):
     assert result.exit_code == 1
     assert "nope.yaml" in result.output
     assert "Traceback" not in result.output
+
+
+class StubStore:
+    """Records the k passed to hybrid_search."""
+
+    def __init__(self):
+        self.calls: list[int] = []
+
+    def hybrid_search(self, query_embedding, query_text, k, rrf_k, tag):
+        self.calls.append(k)
+        return []
+
+
+def test_run_eval_matches_production_candidate_pool(monkeypatch):
+    from brain.config import settings
+
+    gold = [GoldQuery(query="q", expect=["x.md"])]
+    emb = FakeEmbedder({"q": [0.0] * 384})
+
+    stub = StubStore()
+    run_eval(stub, emb, gold)
+    assert stub.calls == [50]  # no rerank: wide fetch for dedupe headroom
+
+    # With rerank on, production reranks only rerank_candidate_pool
+    # candidates — eval must measure the same pipeline.
+    monkeypatch.setattr(settings, "rerank_enabled", True)
+    stub2 = StubStore()
+    run_eval(stub2, emb, gold)
+    assert stub2.calls == [settings.rerank_candidate_pool]

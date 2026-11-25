@@ -140,6 +140,10 @@ def run_eval(
     from brain.config import settings
 
     k_lo, k_hi = k_values
+    # Measure the pipeline production actually runs: with rerank on,
+    # search_notes reranks only rerank_candidate_pool candidates, so eval
+    # must use the same pool. Without rerank, fetch wide for dedupe headroom.
+    fetch_k = settings.rerank_candidate_pool if settings.rerank_enabled else 50
     reranker = None
     rows: list[dict] = []
     queries_out: list[dict] = []
@@ -150,7 +154,7 @@ def run_eval(
         hits = store.hybrid_search(
             query_embedding=query_vec,
             query_text=gq.query,
-            k=50,
+            k=fetch_k,
             rrf_k=settings.rrf_k,
             tag=gq.tag,
         )
@@ -164,7 +168,7 @@ def run_eval(
                 query=gq.query,
                 candidates=list(hits),
                 text_of=lambda h: f"{h.heading_path}\n\n{h.body}" if h.heading_path else h.body,
-                k=50,
+                k=fetch_k,
             )
         latency_ms = (time.perf_counter() - t0) * 1000.0
 

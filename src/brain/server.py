@@ -16,7 +16,7 @@ from brain.embedder import make_embedder
 from brain.indexer import index_single_file
 from brain.report import build_report
 from brain.reranker import make_reranker, rerank_candidates
-from brain.store import Store
+from brain.store import EmbeddingConfigMismatchError, Store
 from brain.writer import (
     InvalidPathError,
     build_note,
@@ -35,21 +35,26 @@ _reranker = None
 def _get_store() -> Store:
     global _store
     if _store is None:
-        _store = Store(
+        store = Store(
             db_path=settings.db_path,
             embedding_dim=settings.embedding_dim,
             fts_stemmer=settings.fts_stemmer,
         )
-        _store.connect()
-        # Raises EmbeddingConfigMismatchError if the stored vectors were
-        # built with a different model/prefix config; the user must run
-        # `brain index --rebuild`.
-        _store.verify_embedding_config(
-            settings.embedding_model,
-            settings.embedding_dim,
-            settings.query_prefix,
-            settings.passage_prefix,
-        )
+        store.connect()
+        # The global is only assigned AFTER the guard passes — otherwise a
+        # retried tool call would skip the check and read/write a store
+        # whose vectors were built with a different model/prefix config.
+        try:
+            store.verify_embedding_config(
+                settings.embedding_model,
+                settings.embedding_dim,
+                settings.query_prefix,
+                settings.passage_prefix,
+            )
+        except EmbeddingConfigMismatchError:
+            store.close()
+            raise
+        _store = store
     return _store
 
 

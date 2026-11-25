@@ -9,8 +9,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# DuckDB fts create_fts_index stemmer options, plus 'none'. The value is
+# interpolated into a PRAGMA, so it must come from this closed list.
+_ALLOWED_STEMMERS = {
+    "arabic", "basque", "catalan", "danish", "dutch", "english", "finnish",
+    "french", "german", "greek", "hindi", "hungarian", "indonesian", "irish",
+    "italian", "lithuanian", "nepali", "norwegian", "porter", "portuguese",
+    "romanian", "russian", "serbian", "spanish", "swedish", "tamil",
+    "turkish", "none",
+}
 
 
 class Settings(BaseSettings):
@@ -43,6 +53,15 @@ class Settings(BaseSettings):
     # FTS stemmer for the DuckDB full-text index. 'porter' (English) is
     # the DuckDB default; 'spanish' or 'none' suit mixed-language vaults.
     fts_stemmer: str = Field(default="porter")
+
+    @field_validator("fts_stemmer")
+    @classmethod
+    def _validate_stemmer(cls, v: str) -> str:
+        if v not in _ALLOWED_STEMMERS:
+            raise ValueError(
+                f"BRAIN_FTS_STEMMER must be one of {sorted(_ALLOWED_STEMMERS)}, got {v!r}"
+            )
+        return v
 
     # Chunking targets, measured roughly in characters since we don't tokenize
     # ahead of embedding (bge-small handles up to 512 tokens ≈ ~2000 chars).
