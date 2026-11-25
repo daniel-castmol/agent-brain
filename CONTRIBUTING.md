@@ -6,7 +6,7 @@ contributions should aim to keep it that way.
 ## Setup
 
 ```bash
-git clone https://github.com/<your-handle>/brain.git
+git clone https://github.com/daniel-castmol/agent-brain.git
 cd brain
 uv sync
 uv run pytest

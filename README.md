@@ -89,8 +89,8 @@ as dbt rebuilding gold tables from bronze sources.
 Requires Python ≥ 3.11 and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/<your-handle>/brain.git
-cd brain
+git clone https://github.com/daniel-castmol/agent-brain.git
+cd agent-brain
 uv sync                   # install dependencies into .venv
 uv run brain init         # create ~/brain-vault and ~/.brain
 uv run brain index        # initial sync (downloads the embedding model first time)

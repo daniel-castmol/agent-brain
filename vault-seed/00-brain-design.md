@@ -15,7 +15,7 @@ Out of the box, AI coding agents forget everything between sessions.
 `CLAUDE.md` gives static context but no write-back, no semantic recall
 over months of work, and no way for the agent to surface "I think we
 discussed this back in March" with actual receipts. The cloud-managed
-memory products (Mem0, MythOS, etc.) require trusting a third party with
+memory products (Mem0, Zep, etc.) require trusting a third party with
 personal data and lock you into their retrieval API. The goal of brain
 is the smallest useful version of persistent agent memory: a vault you
 control, indexed by something you can `cat`, served to agents over a
@@ -43,8 +43,8 @@ back. Same property as dbt building gold tables from bronze sources.
 
 ### DuckDB over SQLite + sqlite-vec
 
-Both work. DuckDB won because (a) it's the daily driver in CORTEX and
-echo-demo, (b) ARRAY columns + `array_cosine_distance` give brute-force
+Both work. DuckDB won because (a) it's already my daily-driver analytics
+engine, (b) ARRAY columns + `array_cosine_distance` give brute-force
 top-k for free, and (c) the FTS extension is built in. Acknowledged
 risk: the `vss` extension's HNSW persistence is experimental — but we
 don't enable HNSW in v1 because brute-force is fine at personal-vault
@@ -69,7 +69,7 @@ local-only, so stdio.
 ### `uv` for everything
 
 Project-scoped venvs, lockfile, fast resolver. `uv run brain index`
-works without activating anything. Same conventions as CORTEX.
+works without activating anything.
 
 ## Quality choices that matter
 
@@ -118,4 +118,4 @@ the vault grows, and an AWS port using S3 + S3 Vectors + Lambda.
 ## Related
 
 - [[Brain — session log 2026-05-06]] — the conversation that produced v1
-- Project repo: `~/WorkspaceTxp/WorkspaceConnect/brain/brain`
+- Project repo: https://github.com/daniel-castmol/agent-brain

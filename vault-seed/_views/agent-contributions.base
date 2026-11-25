@@ -2,7 +2,7 @@
 #
 # Filter: any note tagged `agent` (write_note adds this tag automatically).
 # Use this to audit what the memory layer has captured, find recent agent
-# activity, or spot notes that should be promoted into Daniel-curated
+# activity, or spot notes that should be promoted into user-curated
 # topics.
 #
 # Place at <vault>/_views/agent-contributions.base — Obsidian picks it up

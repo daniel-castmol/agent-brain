@@ -44,8 +44,8 @@ uv --version
 ## 2. Get the code
 
 ```bash
-git clone https://github.com/<your-handle>/brain.git
-cd brain
+git clone https://github.com/daniel-castmol/agent-brain.git
+cd agent-brain
 ```
 
 If you don't have git, you can download a tarball from the GitHub Releases

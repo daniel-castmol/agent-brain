@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Local markdown-based memory layer for AI agents, exposed via MCP."
 readme = "README.md"
 requires-python = ">=3.11"
-authors = [{ name = "Daniel" }]
+authors = [{ name = "Daniel Castillo" }]
 license = { text = "MIT" }
 dependencies = [
     "duckdb>=1.1.0",

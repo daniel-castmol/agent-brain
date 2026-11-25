@@ -22,7 +22,7 @@ model:  BAAI/bge-small-en-v1.5  (384d)
 
 ## Architecture
 
-Bronze → silver → gold. Same medallion pattern used in CORTEX/Connect dbt
+Bronze → silver → gold. Same medallion pattern used in dbt-style warehouse
 work, applied to agent memory.
 
 - **Bronze:** `~/brain-vault/**/*.md` — markdown files, only durable layer.
