@@ -316,6 +316,19 @@ class Store:
     # ------------------------------------------------------------------
     # Reads
     # ------------------------------------------------------------------
+    def get_chunk_embeddings(self, note_path: str) -> dict[str, list[float]]:
+        """content_hash → stored embedding for a note's current chunks.
+
+        Used by the indexer to skip re-embedding unchanged chunks. Only
+        valid while the embedding config matches (verify_embedding_config
+        guarantees that)."""
+        conn = self.connect()
+        rows = conn.execute(
+            "SELECT content_hash, embedding FROM chunks WHERE note_path = ?",
+            [note_path],
+        ).fetchall()
+        return {r[0]: list(r[1]) for r in rows}
+
     def get_note_hash(self, note_path: str) -> str | None:
         conn = self.connect()
         row = conn.execute(

@@ -121,7 +121,8 @@ def index(
         console.print(
             f"[green]✓[/green] scanned={stats.scanned} new={stats.new} "
             f"updated={stats.updated} unchanged={stats.unchanged} "
-            f"deleted={stats.deleted} chunks_embedded={stats.chunks_embedded}"
+            f"deleted={stats.deleted} chunks_embedded={stats.chunks_embedded} "
+            f"chunks_reused={stats.chunks_reused}"
         )
 
     _run_once()

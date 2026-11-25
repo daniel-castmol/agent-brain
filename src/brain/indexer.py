@@ -30,6 +30,32 @@ class IndexStats:
     unchanged: int = 0
     deleted: int = 0
     chunks_embedded: int = 0
+    chunks_reused: int = 0
+
+
+def _embed_with_reuse(
+    store: Store,
+    note_path: str,
+    chunks: list,
+    embedder: Embedder,
+) -> tuple[list[list[float]], int]:
+    """Embed only chunks whose content_hash isn't already stored for this
+    note; reuse stored vectors for the rest. Must run BEFORE the old
+    chunks are deleted. Returns (embeddings aligned with chunks, reused)."""
+    if not chunks:
+        return [], 0
+    existing = store.get_chunk_embeddings(note_path)
+    to_embed = [c.content for c in chunks if c.content_hash not in existing]
+    fresh = iter(embedder.embed_passages(to_embed) if to_embed else [])
+    embeddings: list[list[float]] = []
+    reused = 0
+    for c in chunks:
+        if c.content_hash in existing:
+            embeddings.append(existing[c.content_hash])
+            reused += 1
+        else:
+            embeddings.append(next(fresh))
+    return embeddings, reused
 
 
 def _resolve_wikilinks(
@@ -82,7 +108,7 @@ def index_vault(settings: Settings, embedder: Embedder, store: Store) -> IndexSt
             target_chars=settings.chunk_target_chars,
             overlap_chars=settings.chunk_overlap_chars,
         )
-        embeddings = embedder.embed_passages([c.content for c in chunks]) if chunks else []
+        embeddings, reused = _embed_with_reuse(store, note.path, chunks, embedder)
 
         modified_at = datetime.fromtimestamp(abs_path.stat().st_mtime)
         with store.transaction():
@@ -95,7 +121,8 @@ def index_vault(settings: Settings, embedder: Embedder, store: Store) -> IndexSt
         notes_to_resolve.append(
             (note.path, [(wl.target, wl.alias) for wl in note.wikilinks])
         )
-        stats.chunks_embedded += len(chunks)
+        stats.chunks_embedded += len(chunks) - reused
+        stats.chunks_reused += reused
         if existing_hash is None:
             stats.new += 1
         else:
@@ -148,7 +175,7 @@ def index_single_file(
         target_chars=settings.chunk_target_chars,
         overlap_chars=settings.chunk_overlap_chars,
     )
-    embeddings = embedder.embed_passages([c.content for c in chunks]) if chunks else []
+    embeddings, _reused = _embed_with_reuse(store, note.path, chunks, embedder)
 
     modified_at = datetime.fromtimestamp(abs_path.stat().st_mtime)
     with store.transaction():
