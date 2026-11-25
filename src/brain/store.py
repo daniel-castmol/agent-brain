@@ -83,6 +83,9 @@ class Store:
         self.db_path = db_path
         self.embedding_dim = embedding_dim
         self._conn: duckdb.DuckDBPyConnection | None = None
+        # FTS index freshness. Starts dirty so a fresh connection always
+        # rebuilds once (covers writes made by another process).
+        self._fts_dirty = True
 
     def connect(self) -> duckdb.DuckDBPyConnection:
         if self._conn is None:
@@ -166,6 +169,7 @@ class Store:
         chunks still reference the note row being updated."""
         conn = self.connect()
         conn.execute("DELETE FROM chunks WHERE note_path = ?", [note_path])
+        self._fts_dirty = True
 
     def replace_chunks(
         self,
@@ -195,6 +199,7 @@ class Store:
                     vec,
                 ],
             )
+        self._fts_dirty = True
 
     def replace_links(self, note_path: str, links: list[tuple[str, str | None, str | None]]) -> None:
         """links: list of (target_name, target_path_or_None, alias_or_None)."""
@@ -215,6 +220,7 @@ class Store:
         conn.execute("DELETE FROM chunks WHERE note_path = ?", [note_path])
         conn.execute("DELETE FROM links WHERE source_path = ?", [note_path])
         conn.execute("DELETE FROM notes WHERE path = ?", [note_path])
+        self._fts_dirty = True
 
     # ------------------------------------------------------------------
     # Reads
@@ -317,16 +323,13 @@ class Store:
         We rebuild the FTS index lazily; for a personal vault this is cheap.
         """
         conn = self.connect()
-        # Build (or rebuild) the FTS index over the chunks table on every query.
-        # For a few-thousand-chunk vault this takes milliseconds. If it ever
-        # becomes a bottleneck, we can rebuild only after writes.
-        try:
+        # Rebuild the FTS index only when chunk data changed since the last
+        # build (or on the first search of this connection).
+        if self._fts_dirty:
             conn.execute(
                 "PRAGMA create_fts_index('chunks', 'id', 'body', 'heading_path', overwrite=1)"
             )
-        except duckdb.Error:
-            # PRAGMA can fail on already-existing index in some versions; ignore.
-            pass
+            self._fts_dirty = False
 
         sql = """
             WITH scored AS (
