@@ -251,7 +251,7 @@ def eval(
     summary.add_row("MRR@10", f"{s['mrr_at_10']:.3f}")
     summary.add_row("latency mean/p95", f"{s['latency_mean_ms']:.0f} / {s['latency_p95_ms']:.0f} ms")
     for lang, m in s["by_lang"].items():
-        summary.add_row(f"recall@5 [{lang}]", f"{m['recall_at_5']:.2%} (n={m['n']})")
+        summary.add_row(f"recall@5 ({lang})", f"{m['recall_at_5']:.2%} (n={m['n']})")
     console.print(summary)
 
 
