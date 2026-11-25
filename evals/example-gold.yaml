@@ -1,0 +1,27 @@
+# Example gold set for `brain eval`.
+#
+# Your real gold set lives in your vault at <vault>/_evals/gold.yaml
+# (the default path `brain eval` reads). Each entry is a query you'd
+# actually ask, plus the note path(s) that should come back. A query
+# counts as a hit if ANY expected path appears in the top-k distinct
+# notes.
+#
+# Fields:
+#   query:  natural-language question, in the language you'd really use
+#   expect: list of vault-relative note paths that answer it
+#   tag:    optional frontmatter-tag filter (passed to search)
+#   lang:   optional language label for per-language metrics (default: en)
+#
+# This example assumes the vault-seed/ notes are in your vault.
+
+- query: why duckdb over sqlite
+  expect:
+    - 00-brain-design.md
+
+- query: what did the first brain session decide about embeddings
+  expect:
+    - 01-session-2026-05-06.md
+
+- query: how does hybrid retrieval combine vector and keyword search
+  expect:
+    - 00-brain-design.md

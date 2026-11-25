@@ -117,3 +117,73 @@ def test_load_gold_raises_on_entry_without_expect(tmp_path: Path):
     bad.write_text("- query: no expectations\n  expect: []\n", encoding="utf-8")
     with pytest.raises(GoldFileError):
         load_gold(bad)
+
+
+# ----------------------------------------------------------------------
+# Runner + CLI
+# ----------------------------------------------------------------------
+
+import json
+from datetime import datetime
+
+from brain.evaluate import run_eval
+from brain.store import Store
+
+
+class FakeEmbedder:
+    """Maps query text → fixed vector; no model, no network."""
+
+    def __init__(self, mapping: dict[str, list[float]]):
+        self.mapping = mapping
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.mapping[text]
+
+
+def _one_hot(i: int, dim: int = 384) -> list[float]:
+    v = [0.0] * dim
+    v[i] = 1.0
+    return v
+
+
+def _seed_note(store: Store, path: str, embedding: list[float]) -> None:
+    conn = store.connect()
+    conn.execute(
+        "INSERT INTO notes (path, title, frontmatter, tags, content_hash, modified_at, indexed_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [path, path, json.dumps({}), [], "x", datetime.now(), datetime.now()],
+    )
+    conn.execute(
+        "INSERT INTO chunks (id, note_path, chunk_index, heading_path, content, body,"
+        " content_hash, char_count, embedding)"
+        " VALUES (nextval('chunk_id_seq'), ?, 0, 'H', 'body text', 'body text', ?, 9, ?::FLOAT[])",
+        [path, f"h-{path}", embedding],
+    )
+
+
+def test_run_eval_scores_against_seeded_store(tmp_path: Path):
+    store = Store(db_path=tmp_path / "t.duckdb", embedding_dim=384)
+    store.connect()
+    _seed_note(store, "alpha.md", _one_hot(0))
+    _seed_note(store, "beta.md", _one_hot(1))
+    gold = [
+        GoldQuery(query="alpha", expect=["alpha.md"]),
+        GoldQuery(query="alpha", expect=["missing.md"]),  # absent path = miss, run completes
+    ]
+    res = run_eval(store, FakeEmbedder({"alpha": _one_hot(0)}), gold)
+    store.close()
+    assert res["summary"]["recall_at_5"] == 0.5
+    assert res["summary"]["n"] == 2
+    assert res["queries"][0]["first_hit_rank"] == 1
+    assert res["queries"][1]["first_hit_rank"] is None
+
+
+def test_cli_eval_errors_cleanly_on_missing_gold(tmp_path: Path):
+    from typer.testing import CliRunner
+
+    from brain.cli import app
+
+    result = CliRunner().invoke(app, ["eval", "--gold", str(tmp_path / "nope.yaml")])
+    assert result.exit_code == 1
+    assert "nope.yaml" in result.output
+    assert "Traceback" not in result.output

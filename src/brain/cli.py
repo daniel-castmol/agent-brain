@@ -13,6 +13,7 @@ Commands:
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -157,6 +158,61 @@ def search(
         excerpt = h.body[:160].replace("\n", " ") + ("…" if len(h.body) > 160 else "")
         table.add_row(f"{h.score:.3f}", h.note_path, h.heading_path, excerpt)
     console.print(table)
+
+
+@app.command()
+def eval(
+    gold: Path | None = typer.Option(
+        None, "--gold", help="Gold-set YAML (default: <vault>/_evals/gold.yaml)."
+    ),
+    raw: bool = typer.Option(False, "--json", help="Output raw JSON results."),
+) -> None:
+    """Evaluate retrieval quality against a gold set of queries.
+
+    Reports note-level recall@5, recall@10, MRR@10, per-language
+    breakdown, and query latency. See evals/example-gold.yaml for the
+    gold-set format.
+    """
+    from brain.evaluate import GoldFileError, load_gold, run_eval
+
+    gold_path = gold or (settings.vault_dir / "_evals" / "gold.yaml")
+    try:
+        gold_queries = load_gold(gold_path)
+    except GoldFileError as e:
+        console.print(f"[red]✗[/red] {e}")
+        raise typer.Exit(1) from e
+
+    store = _make_store()
+    embedder = _make_embedder()
+    with console.status("[cyan]Running eval…"):
+        res = run_eval(store, embedder, gold_queries)
+
+    if raw:
+        console.print_json(data=res)
+        return
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("query", overflow="fold")
+    table.add_column("lang", width=4)
+    table.add_column("first hit", justify="right")
+    table.add_column("ms", justify="right")
+    for q in res["queries"]:
+        rank = f"#{q['first_hit_rank']}" if q["first_hit_rank"] else "[red]✗[/red]"
+        table.add_row(q["query"], q["lang"], rank, f"{q['latency_ms']:.0f}")
+    console.print(table)
+
+    s = res["summary"]
+    summary = Table(show_header=False, box=None)
+    summary.add_column(style="dim")
+    summary.add_column()
+    summary.add_row("queries", str(s["n"]))
+    summary.add_row("recall@5", f"{s['recall_at_5']:.2%}")
+    summary.add_row("recall@10", f"{s['recall_at_10']:.2%}")
+    summary.add_row("MRR@10", f"{s['mrr_at_10']:.3f}")
+    summary.add_row("latency mean/p95", f"{s['latency_mean_ms']:.0f} / {s['latency_p95_ms']:.0f} ms")
+    for lang, m in s["by_lang"].items():
+        summary.add_row(f"recall@5 [{lang}]", f"{m['recall_at_5']:.2%} (n={m['n']})")
+    console.print(summary)
 
 
 @app.command()

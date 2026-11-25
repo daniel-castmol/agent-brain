@@ -10,10 +10,15 @@ that wires them into the live store/embedder (`run_eval`).
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from brain.store import SearchHit
+
+if TYPE_CHECKING:
+    from brain.store import Store
 
 
 class GoldFileError(Exception):
@@ -119,3 +124,72 @@ def aggregate(per_query: list[dict]) -> dict:
         lang: _metrics([r for r in per_query if r["lang"] == lang]) for lang in langs
     }
     return out
+
+
+def run_eval(
+    store: "Store",
+    embedder,
+    gold: list[GoldQuery],
+    k_values: tuple[int, int] = (5, 10),
+) -> dict:
+    """Score the gold set against the production search path.
+
+    Fetches 50 chunk hits per query (rerank applied when
+    BRAIN_RERANK_ENABLED), dedupes to distinct notes, scores at k_values.
+    """
+    from brain.config import settings
+
+    k_lo, k_hi = k_values
+    reranker = None
+    rows: list[dict] = []
+    queries_out: list[dict] = []
+
+    for gq in gold:
+        t0 = time.perf_counter()
+        query_vec = embedder.embed_query(gq.query)
+        hits = store.hybrid_search(
+            query_embedding=query_vec,
+            query_text=gq.query,
+            k=50,
+            rrf_k=settings.rrf_k,
+            tag=gq.tag,
+        )
+        if settings.rerank_enabled and hits:
+            from brain.reranker import make_reranker, rerank_candidates
+
+            if reranker is None:
+                reranker = make_reranker(model_name=settings.rerank_model)
+            hits = rerank_candidates(
+                reranker=reranker,
+                query=gq.query,
+                candidates=list(hits),
+                text_of=lambda h: f"{h.heading_path}\n\n{h.body}" if h.heading_path else h.body,
+                k=50,
+            )
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+
+        ranked = dedupe_to_notes(hits)
+        expected = set(gq.expect)
+        first_hit_rank = next(
+            (rank for rank, p in enumerate(ranked, start=1) if p in expected), None
+        )
+        row = {
+            "lang": gq.lang,
+            "hit_at_5": hit_at_k(ranked, gq.expect, k_lo),
+            "hit_at_10": hit_at_k(ranked, gq.expect, k_hi),
+            "rr": reciprocal_rank(ranked[:k_hi], gq.expect),
+            "latency_ms": latency_ms,
+        }
+        rows.append(row)
+        queries_out.append(
+            {
+                "query": gq.query,
+                "lang": gq.lang,
+                "first_hit_rank": first_hit_rank,
+                "hit_at_5": row["hit_at_5"],
+                "hit_at_10": row["hit_at_10"],
+                "latency_ms": round(latency_ms, 2),
+            }
+        )
+
+    return {"summary": aggregate(rows), "queries": queries_out}
