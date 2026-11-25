@@ -12,8 +12,10 @@ months. Two things block that today:
 
 1. **Embeddings are English-only** (`bge-small-en-v1.5`). The user's
    class/book notes include Spanish; semantic recall on them will be poor
-   or random. The existing `digital-brain` Obsidian vault can't be
-   meaningfully merged in until this is fixed.
+   or random. (The previous `digital-brain` vault was lost with a
+   returned work computer — the vault is being rebuilt by hand and will
+   be bilingual from day one, so multilingual retrieval is needed up
+   front, not as a migration.)
 2. **Retrieval quality is unmeasured.** There is no way to tell whether a
    model swap, chunk-size change, or the cross-encoder rerank makes search
    better or worse. Every future retrieval change is a guess.
@@ -38,8 +40,13 @@ to choose the multilingual model, then migrate and backfill.
      every query (today: `store.py` `fts_search` rebuilds per query).
    - FTS stemmer becomes configurable (`BRAIN_FTS_STEMMER`) for mixed
      English/Spanish content; default decided by eval numbers.
-4. **Backfill the existing `digital-brain` vault** into `~/brain-vault`
-   so there is one vault.
+4. **Support the vault rebuild.** There is no old vault to import (lost
+   with a returned work computer). The vault grows by the user rewriting
+   notes — in Obsidian and via the agent's `write_note` — and the gold
+   set grows alongside it. v3's job is to make sure nothing about the
+   system assumes English-only content while that happens, and to
+   recommend (in docs) putting the vault under private git from day one
+   so notes can never be lost to a machine again.
 
 ## Non-goals (v4+)
 
@@ -131,9 +138,11 @@ implementation time; verify with `TextEmbedding.list_supported_models()`):
 | `intfloat/multilingual-e5-large` (or `-small` if supported) | 1024 | ~2.2 GB | Needs `query:`/`passage:` prefixes |
 | `BAAI/bge-m3` (if supported) | 1024 | ~2.2 GB | Strongest on paper |
 
-**Selection procedure:** the bake-off runs **after** the digital-brain
-backfill (see build order), so the vault and the gold set are genuinely
-bilingual when the model is chosen. Index the merged vault once per
+**Selection procedure:** the bake-off runs once the rebuilt vault has
+enough real bilingual content to measure against (rough bar: ~30+ notes
+with a meaningful Spanish share, and a gold set of ~20 queries, ≥⅓
+Spanish). Until then the harness still runs — baseline numbers on the
+English model are the "before" picture. Index the vault once per
 candidate (separate `BRAIN_DB_FILENAME` per run), run `brain eval --json`
 on each, compare recall@5 / MRR / latency. Decision rule: smallest model
 within 2 points of the best recall@5 wins. The losing numbers go in the
@@ -189,15 +198,21 @@ decided by the eval numbers, not guessed.
 - No change to brute-force cosine. `brain eval` latency output is the
   tripwire for revisiting HNSW.
 
-### Part 4 — backfill `digital-brain`
+### Part 4 — vault rebuild support
 
-Copy (never move) the old vault's markdown into `~/brain-vault/`,
-preserving mtimes (`cp -rp`) so `list_recent` stays honest. Non-markdown
-assets (images, PDFs) are ignored by the indexer; broken Obsidian-isms
-(dataview blocks, callouts) index as plain text, which is acceptable.
-Open questions for the user below (location, target folder layout,
-whether anything stays out). After backfill: `brain index --rebuild`
-with the chosen model, then re-run `brain eval`.
+No import to build: the previous vault is gone. What v3 does instead:
+
+- **Docs:** README/INSTALL gain a "back up your vault" section
+  recommending `git init` + a private remote inside the vault from day
+  one (markdown-as-truth makes this free; the DuckDB index stays out of
+  git — it's disposable).
+- **Workflow:** the rebuild itself happens through normal use — the user
+  rewrites notes in Obsidian and dictates/summarizes into `write_note`
+  via Claude. No new code needed; the existing SKILL.md path conventions
+  cover organization.
+- **Gold-set habit:** each time a rewritten note is something the user
+  would want recalled later, they add a matching query to
+  `_evals/gold.yaml`. The eval corpus and the vault grow together.
 
 ## Known limitation to document (not fix) in v3
 
@@ -233,9 +248,8 @@ connections with write hand-off) is v4 territory.
 
 ## Build order
 
-Backfill comes **before** the bake-off — the model must be chosen on the
-bilingual vault it will actually serve, with Spanish queries in the gold
-set.
+The bake-off is the **last** step and waits for real bilingual content —
+the model must be chosen on the vault it will actually serve.
 
 1. Eval harness + example gold set + unit tests (pure metrics).
 2. FTS dirty-flag persistence (small, immediately measurable win).
@@ -243,12 +257,12 @@ set.
    stemmer setting.
 4. Per-chunk SHA reuse (+ `chunks_reused` stat) — lands after the guard,
    so stale vectors can never survive a model/prefix change.
-5. Backfill digital-brain into the vault; index with the current English
-   model.
-6. User writes the real gold set (~20 queries, ≥⅓ Spanish); baseline
-   numbers on the current English model recorded — this is the "before"
-   picture.
-7. Model bake-off (rerank off), pick winner, flip config defaults/docs,
-   final `--rebuild`.
+5. Docs: vault-backup (private git) section; single-writer limitation
+   note; model-switching section.
+6. **[user, ongoing]** Rebuild the vault through normal use; grow the
+   gold set alongside it (~20 queries, ≥⅓ Spanish).
+7. **[gated on 6]** Baseline eval on the English model, then the model
+   bake-off (rerank off), pick winner, flip config defaults/docs,
+   `--rebuild`.
 8. Re-run eval with the winner (and rerank on/off); record final
    numbers — the before/after for the Substack post.
