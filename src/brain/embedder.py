@@ -15,9 +15,17 @@ if TYPE_CHECKING:
 class Embedder:
     """Thin wrapper around a fastembed TextEmbedding model."""
 
-    def __init__(self, model_name: str, expected_dim: int):
+    def __init__(
+        self,
+        model_name: str,
+        expected_dim: int,
+        query_prefix: str = "",
+        passage_prefix: str = "",
+    ):
         self.model_name = model_name
         self.expected_dim = expected_dim
+        self.query_prefix = query_prefix
+        self.passage_prefix = passage_prefix
         self._model: TextEmbedding | None = None
 
     def _ensure_loaded(self) -> "TextEmbedding":
@@ -45,9 +53,27 @@ class Embedder:
             )
         return out
 
+    def embed_passages(self, texts: list[str], batch_size: int = 32) -> list[list[float]]:
+        """Embed indexable content, applying the passage prefix.
+
+        The prefix is applied at embed time only — chunk content and
+        hashes never contain it.
+        """
+        return self.embed_batch([self.passage_prefix + t for t in texts], batch_size=batch_size)
+
     def embed_query(self, text: str) -> list[float]:
-        return self.embed_batch([text])[0]
+        return self.embed_batch([self.query_prefix + text])[0]
 
 
-def make_embedder(model_name: str, expected_dim: int) -> Embedder:
-    return Embedder(model_name=model_name, expected_dim=expected_dim)
+def make_embedder(
+    model_name: str,
+    expected_dim: int,
+    query_prefix: str = "",
+    passage_prefix: str = "",
+) -> Embedder:
+    return Embedder(
+        model_name=model_name,
+        expected_dim=expected_dim,
+        query_prefix=query_prefix,
+        passage_prefix=passage_prefix,
+    )

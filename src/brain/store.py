@@ -91,9 +91,10 @@ CREATE SEQUENCE IF NOT EXISTS chunk_id_seq START 1;
 
 
 class Store:
-    def __init__(self, db_path: Path, embedding_dim: int):
+    def __init__(self, db_path: Path, embedding_dim: int, fts_stemmer: str = "porter"):
         self.db_path = db_path
         self.embedding_dim = embedding_dim
+        self.fts_stemmer = fts_stemmer
         self._conn: duckdb.DuckDBPyConnection | None = None
         # FTS index freshness. Starts dirty so a fresh connection always
         # rebuilds once (covers writes made by another process).
@@ -417,7 +418,8 @@ class Store:
         # build (or on the first search of this connection).
         if self._fts_dirty:
             conn.execute(
-                "PRAGMA create_fts_index('chunks', 'id', 'body', 'heading_path', overwrite=1)"
+                "PRAGMA create_fts_index('chunks', 'id', 'body', 'heading_path', "
+                f"stemmer='{self.fts_stemmer}', overwrite=1)"
             )
             self._fts_dirty = False
 

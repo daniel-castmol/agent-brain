@@ -33,12 +33,19 @@ console = Console()
 
 def _make_store(verify: bool = True) -> Store:
     settings.ensure_dirs()
-    store = Store(db_path=settings.db_path, embedding_dim=settings.embedding_dim)
+    store = Store(
+        db_path=settings.db_path,
+        embedding_dim=settings.embedding_dim,
+        fts_stemmer=settings.fts_stemmer,
+    )
     store.connect()
     if verify:
         try:
             store.verify_embedding_config(
-                settings.embedding_model, settings.embedding_dim, "", ""
+                settings.embedding_model,
+                settings.embedding_dim,
+                settings.query_prefix,
+                settings.passage_prefix,
             )
         except EmbeddingConfigMismatchError as e:
             console.print(f"[red]✗[/red] {e}")
@@ -50,6 +57,8 @@ def _make_embedder():
     return make_embedder(
         model_name=settings.embedding_model,
         expected_dim=settings.embedding_dim,
+        query_prefix=settings.query_prefix,
+        passage_prefix=settings.passage_prefix,
     )
 
 
@@ -96,7 +105,10 @@ def index(
             )
         store.rebuild_schema()
         store.verify_embedding_config(
-            settings.embedding_model, settings.embedding_dim, "", ""
+            settings.embedding_model,
+            settings.embedding_dim,
+            settings.query_prefix,
+            settings.passage_prefix,
         )
         console.print("[yellow]Index dropped — re-embedding from scratch.[/yellow]")
     else:

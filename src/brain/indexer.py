@@ -82,7 +82,7 @@ def index_vault(settings: Settings, embedder: Embedder, store: Store) -> IndexSt
             target_chars=settings.chunk_target_chars,
             overlap_chars=settings.chunk_overlap_chars,
         )
-        embeddings = embedder.embed_batch([c.content for c in chunks]) if chunks else []
+        embeddings = embedder.embed_passages([c.content for c in chunks]) if chunks else []
 
         modified_at = datetime.fromtimestamp(abs_path.stat().st_mtime)
         with store.transaction():
@@ -148,7 +148,7 @@ def index_single_file(
         target_chars=settings.chunk_target_chars,
         overlap_chars=settings.chunk_overlap_chars,
     )
-    embeddings = embedder.embed_batch([c.content for c in chunks]) if chunks else []
+    embeddings = embedder.embed_passages([c.content for c in chunks]) if chunks else []
 
     modified_at = datetime.fromtimestamp(abs_path.stat().st_mtime)
     with store.transaction():

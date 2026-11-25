@@ -35,13 +35,20 @@ _reranker = None
 def _get_store() -> Store:
     global _store
     if _store is None:
-        _store = Store(db_path=settings.db_path, embedding_dim=settings.embedding_dim)
+        _store = Store(
+            db_path=settings.db_path,
+            embedding_dim=settings.embedding_dim,
+            fts_stemmer=settings.fts_stemmer,
+        )
         _store.connect()
         # Raises EmbeddingConfigMismatchError if the stored vectors were
         # built with a different model/prefix config; the user must run
         # `brain index --rebuild`.
         _store.verify_embedding_config(
-            settings.embedding_model, settings.embedding_dim, "", ""
+            settings.embedding_model,
+            settings.embedding_dim,
+            settings.query_prefix,
+            settings.passage_prefix,
         )
     return _store
 
@@ -52,6 +59,8 @@ def _get_embedder():
         _embedder = make_embedder(
             model_name=settings.embedding_model,
             expected_dim=settings.embedding_dim,
+            query_prefix=settings.query_prefix,
+            passage_prefix=settings.passage_prefix,
         )
     return _embedder
 

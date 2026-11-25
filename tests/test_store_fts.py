@@ -81,3 +81,12 @@ def test_delete_marks_dirty(store: Store):
 
 def test_fts_search_on_empty_store_returns_empty(store: Store):
     assert store.fts_search("anything", k=5) == []
+
+
+def test_fts_stemmer_none_matches_exact_spanish_token(tmp_path: Path):
+    s = Store(db_path=tmp_path / "es.duckdb", embedding_dim=384, fts_stemmer="none")
+    s.connect()
+    _insert_note(s, "es.md", body="configuración de embeddings")
+    hits = s.fts_search("configuración", k=5)
+    assert hits and hits[0].note_path == "es.md"
+    s.close()

@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")
     embedding_dim: int = Field(default=384)
 
+    # Asymmetric embedding prefixes. Some models (e5 family) need
+    # "query: " / "passage: " prepended at embed time. Applied only at
+    # embedding, never stored in chunk content or hashes. Changing these
+    # invalidates stored vectors → `brain index --rebuild`.
+    query_prefix: str = Field(default="")
+    passage_prefix: str = Field(default="")
+
+    # FTS stemmer for the DuckDB full-text index. 'porter' (English) is
+    # the DuckDB default; 'spanish' or 'none' suit mixed-language vaults.
+    fts_stemmer: str = Field(default="porter")
+
     # Chunking targets, measured roughly in characters since we don't tokenize
     # ahead of embedding (bge-small handles up to 512 tokens ≈ ~2000 chars).
     chunk_target_chars: int = Field(default=1500)
