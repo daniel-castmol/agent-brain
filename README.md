@@ -139,6 +139,62 @@ All settings come from environment variables prefixed `BRAIN_` (or a `.env`
 file in the project root). See [`.env.example`](./.env.example) for the
 full list. The defaults work out of the box.
 
+## Back up your vault
+
+The vault is the **only** layer that isn't rebuildable — treat it like
+source code, from day one:
+
+```bash
+cd ~/brain-vault
+git init
+git add -A && git commit -m "vault: initial"
+# push to a PRIVATE remote — these are your notes
+```
+
+The DuckDB index stays out of git (it's disposable). A lost laptop should
+never cost you your notes.
+
+## Switching embedding models
+
+The index records the embedding config (model, dimensions, prefixes) it
+was built with. If you change `BRAIN_EMBEDDING_MODEL`,
+`BRAIN_EMBEDDING_DIM`, `BRAIN_QUERY_PREFIX`, or `BRAIN_PASSAGE_PREFIX`,
+brain refuses to mix the old vectors with the new config and tells you to
+rebuild:
+
+```bash
+export BRAIN_EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+export BRAIN_EMBEDDING_DIM=384
+uv run brain index --rebuild        # drops the index, re-embeds the vault
+```
+
+Your markdown is never touched. Note the default FTS stemmer is English
+(`porter`); for a Spanish or mixed vault set `BRAIN_FTS_STEMMER=spanish`
+or `none`.
+
+## Evaluating retrieval quality
+
+`brain eval` scores search against a gold set of queries you curate —
+note-level recall@5/@10, MRR@10, per-language breakdown, and latency:
+
+```yaml
+# ~/brain-vault/_evals/gold.yaml
+- query: why duckdb over sqlite
+  expect: [decisions/brain-storage.md]
+- query: apuntes sobre bases de datos
+  expect: [classes/databases.md]
+  lang: es
+```
+
+```bash
+uv run brain eval            # human-readable report
+uv run brain eval --json     # machine-readable, diff two configs
+```
+
+Grow the gold set as you write notes: every time you save something
+you'll want recalled later, add the query you'd ask for it. See
+[`evals/example-gold.yaml`](./evals/example-gold.yaml) for the format.
+
 ## Privacy
 
 Everything runs locally. The vault, the DuckDB index, and all embeddings
@@ -180,19 +236,27 @@ export BRAIN_RERANK_MODEL=Xenova/ms-marco-MiniLM-L-6-v2
 
 ## Roadmap
 
-**v3 — retrieval polish.** Per-chunk SHA reuse, HNSW once vault scale
-justifies it, better wikilink resolution, tag namespace queries.
+**v3 (current) — measurable, multilingual-ready retrieval.** Eval harness
+(`brain eval`), embedding-config guard + `--rebuild`, per-chunk embedding
+reuse, FTS rebuilt only after writes, prefix/stemmer settings. The
+multilingual model bake-off runs once the vault has enough bilingual
+content to measure against.
 
-**v4 — cloud port.** S3 + S3 Vectors + Lambda mirror of the local stack
-for users who want a shareable cloud version. Same MCP surface, swappable
-backend.
+**v4 — memory lifecycle.** Consolidation, recency-aware retrieval,
+supersede semantics for decisions.
 
 See [`tasks/todo.md`](./tasks/todo.md) for the working roadmap.
+
+## Known limitation: one writer at a time
+
+DuckDB allows a single writer process. Don't run `brain index --watch`
+while the MCP server is in active use — pick one. External edits (e.g.
+from Obsidian) are picked up by the next `brain index` run.
 
 ## Testing
 
 ```bash
-uv run pytest                       # 36 unit tests, <2s
+uv run pytest -m "not integration"  # 62 unit tests, ~3s
 uv run pytest -m integration        # +3 e2e tests (downloads ~120MB cross-encoder)
 ```
 

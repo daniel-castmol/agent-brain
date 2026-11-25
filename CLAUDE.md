@@ -6,11 +6,15 @@ lets agents query the whole thing.
 
 ## Status
 
-v2 active — fresh agent-only vault, English-only embeddings, seven MCP tools
-(four read, two write, one report). Optional cross-encoder rerank is
-opt-in via `BRAIN_RERANK_ENABLED=true`. Verified end-to-end: `brain init`
-→ `brain index` → `brain status` runs clean. 36/36 unit tests pass; 3
-integration tests (slow, model download) are gated behind
+v3 active — seven MCP tools (four read, two write, one report), plus the
+v3 retrieval tooling: `brain eval` gold-set harness, embedding-config
+guard (`meta` table — model/prefix change requires `brain index
+--rebuild`), per-chunk embedding reuse, FTS rebuilt only after writes,
+query/passage prefix + FTS stemmer settings. Optional cross-encoder
+rerank is opt-in via `BRAIN_RERANK_ENABLED=true` (English-only MS MARCO
+model). The multilingual model bake-off is pending: gated on the vault
+having real bilingual content and a user-curated gold set. 62 unit tests
+pass; 3 integration tests (slow, model download) are gated behind
 `pytest -m integration`.
 
 ```
@@ -52,8 +56,9 @@ src/brain/
   chunker.py   section-aware splits, heading breadcrumb prefix
   embedder.py  fastembed lazy-loader, dim validation
   store.py     DuckDB schema, hybrid_search via RRF, find_related
-  indexer.py   walk → diff via SHA256 → re-embed only changed files
-               + index_single_file for v2 single-note re-index
+  indexer.py   walk → diff via SHA256 → re-embed only changed chunks
+               (_embed_with_reuse) + index_single_file for single-note re-index
+  evaluate.py  gold-set loader, note-level recall/MRR metrics, run_eval
   writer.py    pure-fn validate path / build note / compose append
   reranker.py  fastembed cross-encoder, lazy-loaded
   report.py    pure-SQL vault-health counts (cheap, no embedder)
@@ -109,7 +114,9 @@ uv run brain serve            # run MCP server over stdio
 uv run brain search "query"   # debug search from CLI
 uv run brain status           # config + counts
 uv run brain report           # vault-health snapshot (counts, authorship, recency)
-uv run pytest -m "not integration"   # 36 unit tests, ~2s
+uv run brain eval             # retrieval quality vs <vault>/_evals/gold.yaml
+uv run brain index --rebuild  # drop index + re-embed (after model/prefix change)
+uv run pytest -m "not integration"   # 62 unit tests, ~3s
 uv run pytest -m integration         # +3 e2e tests, downloads cross-encoder
 ```
 

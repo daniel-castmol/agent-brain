@@ -302,6 +302,14 @@ Claude Desktop logs MCP server output to:
 | Linux            | `~/.config/Claude/logs/mcp-server-brain.log`                    |
 | Windows (MSIX)   | `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\logs\mcp-server-brain.log` |
 
+### "database is locked" / could not open database
+
+DuckDB allows one writer process at a time. This happens when
+`brain index --watch` is running while the MCP server (Claude) is also
+connected, or two Claude clients are connected at once. Stop the watcher
+while you're using Claude; after editing notes in Obsidian, run a one-shot
+`uv run brain index` instead.
+
 ### Embedding model download fails
 
 Network issue or HuggingFace rate limit. Retry. If you're behind a

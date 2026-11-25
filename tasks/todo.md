@@ -34,14 +34,36 @@
   `rm ~/.brain/db.duckdb && uv run brain index`. Vault is the truth; DB
   is rebuildable.
 
-## v3 — retrieval polish
+## v3 — eval harness + multilingual readiness ✅ shipped (code)
 
-- [ ] Per-chunk SHA reuse: when a file changes, only re-embed chunks whose
-      `content_hash` actually changed. Currently re-embeds the whole file.
+Spec: `docs/superpowers/specs/2026-11-25-brain-v3-multilingual-eval-design.md`
+
+- [x] `brain eval` — gold-set harness (note-level recall@5/@10, MRR@10,
+      per-language breakdown, latency); example at `evals/example-gold.yaml`
+- [x] Embedding-config guard: `meta` table stamps model/dim/prefixes;
+      mismatch → hard error pointing at `brain index --rebuild`
+- [x] `brain index --rebuild` — sanctioned migration path for model swaps
+- [x] Per-chunk SHA reuse: only changed chunks get re-embedded
+      (`chunks_reused` in index stats)
+- [x] FTS index rebuilt only after writes (dirty flag), not per query
+- [x] `BRAIN_QUERY_PREFIX` / `BRAIN_PASSAGE_PREFIX` (e5-style models) and
+      `BRAIN_FTS_STEMMER` (spanish/none for mixed vaults)
+
+### v3 — operational steps (gated on vault content)
+
+- [ ] Rebuild the vault through normal use; grow `<vault>/_evals/gold.yaml`
+      alongside it (~20 queries, ≥⅓ Spanish)
+- [ ] Baseline eval on bge-small-en-v1.5, then the multilingual bake-off
+      (rerank off), pick winner by recall@5, flip defaults, `--rebuild`
+- [ ] Re-run eval with winner; record before/after numbers (Substack)
+
+## Parked retrieval polish
+
 - [ ] Turn on HNSW once vault > ~5k chunks: `INSTALL vss; CREATE INDEX ... USING HNSW`. Note WAL persistence caveat — keep markdown as truth.
 - [ ] Better wikilink resolution: handle nested folders (e.g. `[[projects/cortex/spec]]`), case-sensitivity flag.
 - [ ] Tag namespace queries: `tag = "project/cortex"` should also match `tag = "project/cortex/phase1"`.
 - [ ] Filtered HNSW (ACORN-1 fork) if filtered queries become a bottleneck.
+- [ ] Multilingual cross-encoder reranker (current default is English-only MS MARCO)
 
 ## v4 — cloud port
 
