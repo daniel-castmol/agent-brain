@@ -25,6 +25,13 @@ from brain.chunker import Chunk
 from brain.parser import Note
 
 
+class EmbeddingConfigMismatchError(Exception):
+    """Stored vectors were built with a different embedding config."""
+
+
+_EMBEDDING_CONFIG_KEY = "embedding_config"
+
+
 @dataclass
 class SearchHit:
     note_path: str
@@ -74,6 +81,11 @@ CREATE TABLE IF NOT EXISTS links (
     PRIMARY KEY (source_path, target_name)
 );
 
+CREATE TABLE IF NOT EXISTS meta (
+    key   VARCHAR PRIMARY KEY,
+    value VARCHAR
+);
+
 CREATE SEQUENCE IF NOT EXISTS chunk_id_seq START 1;
 """
 
@@ -99,6 +111,84 @@ class Store:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+
+    # ------------------------------------------------------------------
+    # Embedding-config guard
+    # ------------------------------------------------------------------
+    def get_embedding_config(self) -> dict | None:
+        conn = self.connect()
+        row = conn.execute(
+            "SELECT value FROM meta WHERE key = ?", [_EMBEDDING_CONFIG_KEY]
+        ).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def write_embedding_config(
+        self, model: str, dim: int, query_prefix: str, passage_prefix: str
+    ) -> None:
+        conn = self.connect()
+        value = json.dumps(
+            {
+                "model": model,
+                "dim": dim,
+                "query_prefix": query_prefix,
+                "passage_prefix": passage_prefix,
+            }
+        )
+        conn.execute(
+            """
+            INSERT INTO meta (key, value) VALUES (?, ?)
+            ON CONFLICT (key) DO UPDATE SET value = excluded.value
+            """,
+            [_EMBEDDING_CONFIG_KEY, value],
+        )
+
+    def verify_embedding_config(
+        self, model: str, dim: int, query_prefix: str, passage_prefix: str
+    ) -> None:
+        """Hard gate against silently mixing embedding spaces.
+
+        A same-dimension model swap or a prefix change invalidates every
+        stored vector without tripping the embedder's dim check, so the
+        active config is stamped into `meta` and any mismatch is an error.
+        """
+        current = {
+            "model": model,
+            "dim": dim,
+            "query_prefix": query_prefix,
+            "passage_prefix": passage_prefix,
+        }
+        stored = self.get_embedding_config()
+        if stored is None:
+            self.write_embedding_config(model, dim, query_prefix, passage_prefix)
+            return
+        if stored != current:
+            diffs = "; ".join(
+                f"{k}: stored={stored.get(k)!r}, current={v!r}"
+                for k, v in current.items()
+                if stored.get(k) != v
+            )
+            raise EmbeddingConfigMismatchError(
+                f"Embedding config changed since this index was built ({diffs}). "
+                "Stored vectors are incompatible with the new config — run "
+                "`brain index --rebuild` to drop the index and re-embed the vault."
+            )
+
+    def rebuild_schema(self) -> None:
+        """Drop all derived tables and recreate them empty.
+
+        The vault is the source of truth; this is the sanctioned path for
+        switching embedding models/prefixes (followed by a full index run).
+        """
+        conn = self.connect()
+        try:
+            conn.execute("PRAGMA drop_fts_index('chunks')")
+        except duckdb.Error:
+            pass  # no FTS index yet
+        for table in ("chunks", "links", "notes", "meta"):
+            conn.execute(f"DROP TABLE IF EXISTS {table}")
+        conn.execute("DROP SEQUENCE IF EXISTS chunk_id_seq")
+        conn.execute(SCHEMA_SQL.format(dim=self.embedding_dim))
+        self._fts_dirty = True
 
     @contextmanager
     def transaction(self):

@@ -25,16 +25,24 @@ from brain.config import settings
 from brain.embedder import make_embedder
 from brain.indexer import index_vault
 from brain.report import build_report
-from brain.store import Store
+from brain.store import EmbeddingConfigMismatchError, Store
 
 app = typer.Typer(no_args_is_help=True, help="Local markdown memory layer for AI agents.")
 console = Console()
 
 
-def _make_store() -> Store:
+def _make_store(verify: bool = True) -> Store:
     settings.ensure_dirs()
     store = Store(db_path=settings.db_path, embedding_dim=settings.embedding_dim)
     store.connect()
+    if verify:
+        try:
+            store.verify_embedding_config(
+                settings.embedding_model, settings.embedding_dim, "", ""
+            )
+        except EmbeddingConfigMismatchError as e:
+            console.print(f"[red]✗[/red] {e}")
+            raise typer.Exit(1) from e
     return store
 
 
@@ -71,9 +79,28 @@ def init() -> None:
 @app.command()
 def index(
     watch: bool = typer.Option(False, "--watch", "-w", help="Keep watching after initial sync."),
+    rebuild: bool = typer.Option(
+        False,
+        "--rebuild",
+        help="Drop the index and re-embed the whole vault (required after changing the embedding model or prefixes).",
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the --rebuild confirmation."),
 ) -> None:
     """Sync the vault into DuckDB. Add --watch to keep it live."""
-    store = _make_store()
+    if rebuild:
+        store = _make_store(verify=False)
+        if not yes:
+            typer.confirm(
+                f"Drop the index at {settings.db_path} and re-embed the whole vault?",
+                abort=True,
+            )
+        store.rebuild_schema()
+        store.verify_embedding_config(
+            settings.embedding_model, settings.embedding_dim, "", ""
+        )
+        console.print("[yellow]Index dropped — re-embedding from scratch.[/yellow]")
+    else:
+        store = _make_store()
     embedder = _make_embedder()
 
     def _run_once() -> None:

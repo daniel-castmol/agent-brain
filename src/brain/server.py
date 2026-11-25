@@ -37,6 +37,12 @@ def _get_store() -> Store:
     if _store is None:
         _store = Store(db_path=settings.db_path, embedding_dim=settings.embedding_dim)
         _store.connect()
+        # Raises EmbeddingConfigMismatchError if the stored vectors were
+        # built with a different model/prefix config; the user must run
+        # `brain index --rebuild`.
+        _store.verify_embedding_config(
+            settings.embedding_model, settings.embedding_dim, "", ""
+        )
     return _store
 
 
